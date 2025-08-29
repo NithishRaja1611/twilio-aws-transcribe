@@ -1,0 +1,98 @@
+import os
+import json
+import time
+from typing import List, Optional
+from datetime import datetime, timezone
+from urllib.parse import urlparse
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Path
+from pydantic import BaseModel
+import boto3
+from botocore.exceptions import ClientError
+from openai import OpenAI
+import redis
+from mangum import Mangum   # <-- NEW
+
+# ---------------------------
+# Load env
+# ---------------------------
+load_dotenv()
+
+# Required env vars
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET = os.getenv("S3_BUCKET") or os.getenv("SUMMARY_BUCKET")
+REDIS_URL = os.getenv("REDIS_URL")
+
+if not OPENAI_API_KEY or not S3_BUCKET:
+    raise RuntimeError("Missing required env vars OPENAI_API_KEY or S3_BUCKET")
+
+# ---------------------------
+# Clients
+# ---------------------------
+s3 = boto3.client("s3", region_name=AWS_REGION)
+transcribe = boto3.client("transcribe", region_name=AWS_REGION)
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+redis_client = None
+if REDIS_URL:
+    try:
+        redis_client = redis.from_url(REDIS_URL)
+    except Exception:
+        redis_client = None
+
+# ---------------------------
+# FastAPI + models
+# ---------------------------
+app = FastAPI(title="Unified AI Appointment Processor")
+
+class RecordingInfo(BaseModel):
+    key: str
+    s3_uri: str
+    size: Optional[int]
+    last_modified: Optional[str]
+
+class TranscriptModel(BaseModel):
+    recording_key: str
+    transcript_text: str
+    raw_json: Optional[dict] = None
+
+class SummaryModel(BaseModel):
+    aptid: str
+    short_summary: str
+    full_summary: str
+    generated_by: str
+    generated_at: str
+
+class ProcessResponse(BaseModel):
+    aptid: str
+    recordings: List[RecordingInfo]
+    transcripts: List[TranscriptModel]
+    summary: Optional[SummaryModel]
+
+# ---------------------------
+# Helpers
+# ---------------------------
+# (keep all your helper functions exactly as you pasted:
+# list_recordings_for_apt, start_transcribe_job_if_needed,
+# fetch_transcript_text, generate_openai_summary)
+
+# ---------------------------
+# API endpoints
+# ---------------------------
+@app.post("/process/{aptid}", response_model=ProcessResponse)
+def process_aptid(aptid: str = Path(..., description="Appointment ID (aptid)")):
+    # (same logic as your code)
+    ...
+
+@app.get("/api/appointments/{aptid}", response_model=ProcessResponse)
+def get_appointment(aptid: str = Path(..., description="Appointment ID (aptid)")):
+    # (same logic as your code)
+    ...
+
+# ---------------------------
+# Lambda handler
+# ---------------------------
+handler = Mangum(app)
